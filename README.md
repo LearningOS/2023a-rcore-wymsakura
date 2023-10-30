@@ -1,4 +1,3 @@
-[![Open in Visual Studio Code](https://classroom.github.com/assets/open-in-vscode-718a45dd9cf7e7f842a935f5ebbe5719a5e09af4491e668f4dbf3b35d5cca122.svg)](https://classroom.github.com/online_ide?assignment_repo_id=12516346&assignment_repo_type=AssignmentRepo)
 # rCore-Tutorial-Code-2023A
 
 ### Code
@@ -32,9 +31,8 @@
 $ git clone https://github.com/LearningOS/rCore-Tutorial-Code-2023A.git
 $ cd rCore-Tutorial-Code-2023A
 $ git clone https://github.com/LearningOS/rCore-Tutorial-Test-2023A.git user
-$ git checkout ch$ID
 $ cd os
-# run OS in ch$ID
+$ git checkout ch$ID
 $ make run
 ```
 Notice: $ID is from [1-9]
@@ -45,11 +43,8 @@ Notice: $ID is from [1-9]
 # setup build&run environment first
 $ git clone https://github.com/LearningOS/rCore-Tutorial-Code-2023A.git
 $ cd rCore-Tutorial-Code-2023A
-$ rm -rf ci-user
 $ git clone https://github.com/LearningOS/rCore-Tutorial-Checker-2023A.git ci-user
 $ git clone https://github.com/LearningOS/rCore-Tutorial-Test-2023A.git ci-user/user
-$ git checkout ch$ID
-# check&grade OS in ch$ID with more tests
 $ cd ci-user && make test CHAPTER=$ID
 ```
 Notice: $ID is from [3,4,5,6,8]
