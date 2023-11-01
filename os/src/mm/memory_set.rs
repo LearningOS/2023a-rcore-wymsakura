@@ -63,12 +63,31 @@ impl MemorySet {
             None,
         );
     }
+    /// push MapArea to areas
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
         if let Some(data) = data {
             map_area.copy_data(&mut self.page_table, data);
         }
         self.areas.push(map_area);
+    }
+    /// unmap the MapArae
+    pub fn remove_framed_area(
+        &mut self,
+        start_va: VirtAddr,
+        end_va: VirtAddr,
+    ) {
+        let start = start_va.floor();
+        let end = end_va.ceil();
+        self.pop(start, end);
+    }
+    /// pop a MapArea from areas
+    pub fn pop(&mut self, start: VirtPageNum, end: VirtPageNum) {
+        for area in &mut self.areas {
+            if start <= area.vpn_range.get_start() && area.vpn_range.get_end() <= end {
+                area.unmap(&mut self.page_table);
+            }
+        }
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
@@ -263,69 +282,6 @@ impl MemorySet {
         }
     }
 
-    /// map a MemorySet
-    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
-        // check start
-        if start & (PAGE_SIZE - 1) != 0 {
-            println!("invalid start: {:#x}", start);
-            return -1;
-        }
-        // check port
-        if port > 7usize || port == 0 {
-            println!("invalid port: {:#b}", port);
-            return -1;
-        }
-        // check valid
-        let start_vpn = VirtAddr::from(start).floor();
-        let end_vpn = VirtAddr::from(start + len).ceil();
-        let vpnrange = VPNRange::new(start_vpn, end_vpn);
-        for vpn in vpnrange {
-            if let Some(pte) = self.translate(vpn) {
-                if pte.is_valid() {
-                    println!("{:?} vpn occupied!", vpn);
-                    return -1;
-                }
-            }
-        }
-	    // set permission
-        let mut permission = MapPermission::U;
-        if (port & 1) != 0 {
-            permission |= MapPermission::R;
-        }
-        if (port & 2) != 0 {
-            permission |= MapPermission::W;
-        }
-        if (port & 4) != 0 {
-            permission |= MapPermission::X;
-        }
-        self.insert_framed_area(VirtAddr::from(start), VirtAddr::from(start+len), permission);
-        0
-    }
-
-    /// unmap a MemorySet
-    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
-        // check start
-        if start & (PAGE_SIZE - 1) != 0 {
-            println!("invalid start: {:#x}", start);
-            return -1;
-        }
-        // check valid
-        let start_vpn = VirtAddr(start).floor();
-        let end_vpn = VirtAddr(start + len).ceil();
-        let vpnrange = VPNRange::new(start_vpn, end_vpn);
-        for vpn in vpnrange {
-            let pte = self.page_table.find_pte(vpn);
-            if !pte.unwrap().is_valid() {
-                return -1;
-            }
-            for area in &mut self.areas {
-                if area.vpn_range.get_start() <= vpn && vpn < area.vpn_range.get_end() {
-                    area.unmap_one(&mut self.page_table, vpn);
-                }
-            }
-        }
-        0
-    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -461,7 +417,7 @@ pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
 
 /// remap test in kernel space
 #[allow(unused)]
-pub fn remap_test() {
+pub fn remap_test() {// mark
     let mut kernel_space = KERNEL_SPACE.exclusive_access();
     let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
     let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
@@ -482,15 +438,4 @@ pub fn remap_test() {
         .unwrap()
         .executable(),);
     println!("remap_test passed!");
-}
-
-/// mmap memory_set
-pub fn mm_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
-    kernel_space.mmap(_start, _len, _port)
-}
-/// munmap memory_set
-pub fn mm_munmap(_start: usize, _len: usize) -> isize {
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
-    kernel_space.munmap(_start, _len)
 }

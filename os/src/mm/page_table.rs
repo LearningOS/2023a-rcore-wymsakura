@@ -186,11 +186,10 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 pub fn virt_addr_to_phys_addr(virt_addr : VirtAddr) -> Option<PhysAddr> {
     let offset = virt_addr.page_offset();
     let vpn = virt_addr.floor();
-    let ppn = PageTable::from_token(current_user_token())
+    if let Some(ppn) = PageTable::from_token(current_user_token())
         .translate(vpn)
-        .map(|pte| pte.ppn());
-    if let Some(ppn) = ppn {
-        Some(PhysAddr::from((PhysAddr::from(ppn)).0 + offset))
+        .map(|pte| pte.ppn()) {
+            Some(PhysAddr::from(PhysAddr::from(ppn).0 + offset))
     } else {
         println!("virt_addr_to_phys_addr() fail");
         None

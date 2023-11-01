@@ -1,6 +1,6 @@
 //! Types related to task management
 use super::TaskContext;
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{TRAP_CONTEXT_BASE, MAX_SYSCALL_NUM};
 use crate::mm::{
     kernel_stack_position, MapPermission, MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE,
 };
@@ -28,6 +28,9 @@ pub struct TaskControlBlock {
 
     /// Program break
     pub program_brk: usize,
+
+    /// The task info inner
+    pub task_info_inner: TaskInfoInner,
 }
 
 impl TaskControlBlock {
@@ -63,6 +66,7 @@ impl TaskControlBlock {
             base_size: user_sp,
             heap_bottom: user_sp,
             program_brk: user_sp,
+            task_info_inner: TaskInfoInner::init(),
         };
         // prepare TrapContext in user space
         let trap_cx = task_control_block.get_trap_cx();
@@ -109,4 +113,29 @@ pub enum TaskStatus {
     Running,
     /// exited
     Exited,
+}
+
+/// The info of a task
+#[derive(Copy, Clone)]
+pub struct TaskInfoInner {
+    /// The task status in it's lifecycle
+    pub status: TaskStatus,
+    /// The times of syscall by bucket
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    /// The task start_time
+    pub start_time: usize,
+    /// The task end_time
+    pub end_time: usize,
+}
+
+impl TaskInfoInner {
+    /// Create a new empty task info
+    pub fn init() -> Self {
+        Self {
+            status: TaskStatus::Running,
+            syscall_times: [0; MAX_SYSCALL_NUM],
+            start_time: 0,
+            end_time: 0,
+        }
+    }
 }

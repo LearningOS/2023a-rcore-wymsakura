@@ -2,10 +2,9 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     task::{
-        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
+        change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, get_task_info, task_mmap, task_munmap, TaskStatus,
     },
     mm::{
-        memory_set::{mm_mmap, mm_munmap},
         VirtAddr,
         page_table::virt_addr_to_phys_addr,
     },
@@ -23,11 +22,11 @@ pub struct TimeVal {
 #[allow(dead_code)]
 pub struct TaskInfo {
     /// Task status in it's life cycle
-    status: TaskStatus,
+    pub(crate) status: TaskStatus,
     /// The numbers of syscall called by task
-    syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub(crate) syscall_times: [u32; MAX_SYSCALL_NUM],
     /// Total running time of task
-    time: usize,
+    pub(crate) time: usize,
 }
 
 /// task exits and submit an exit code
@@ -69,13 +68,19 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    if let Some(ti) = virt_addr_to_phys_addr(VirtAddr(_ti as usize)) {
+        get_task_info(ti.0 as *mut TaskInfo);
+        0
+    } else {
+        println!("don't get the phys_addr");
+        -1
+    }
 }
 
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    if mm_mmap(_start, _len, _port) == 0 {
+    if task_mmap(_start, _len, _port) == 0 {
         0
     } else {
         -1
@@ -85,7 +90,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    if mm_munmap(_start, _len) == 0 {
+    if task_munmap(_start, _len) == 0 {
         0
     } else {
         -1
