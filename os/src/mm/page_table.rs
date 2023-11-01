@@ -1,6 +1,8 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use crate::task::current_user_token;
+
+use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, PhysAddr};
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
@@ -8,13 +10,21 @@ use bitflags::*;
 bitflags! {
     /// page table entry flags
     pub struct PTEFlags: u8 {
+        /// v
         const V = 1 << 0;
+        /// r
         const R = 1 << 1;
+        /// w
         const W = 1 << 2;
+        /// x
         const X = 1 << 3;
+        /// u
         const U = 1 << 4;
+        /// g
         const G = 1 << 5;
+        /// a
         const A = 1 << 6;
+        /// d
         const D = 1 << 7;
     }
 }
@@ -108,7 +118,7 @@ impl PageTable {
         result
     }
     /// Find PageTableEntry by VirtPageNum
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
@@ -170,4 +180,19 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// translate VirtAddress to PhyAddress
+pub fn virt_addr_to_phys_addr(virt_addr : VirtAddr) -> Option<PhysAddr> {
+    let offset = virt_addr.page_offset();
+    let vpn = virt_addr.floor();
+    let ppn = PageTable::from_token(current_user_token())
+        .translate(vpn)
+        .map(|pte| pte.ppn());
+    if let Some(ppn) = ppn {
+        Some(PhysAddr::from((PhysAddr::from(ppn)).0 + offset))
+    } else {
+        println!("virt_addr_to_phys_addr() fail");
+        None
+    }
 }

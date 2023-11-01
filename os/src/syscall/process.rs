@@ -4,6 +4,12 @@ use crate::{
     task::{
         change_program_brk, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus,
     },
+    mm::{
+        memory_set::{mm_mmap, mm_munmap},
+        VirtAddr,
+        page_table::virt_addr_to_phys_addr,
+    },
+    timer::get_time_us
 };
 
 #[repr(C)]
@@ -42,8 +48,20 @@ pub fn sys_yield() -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
-    trace!("kernel: sys_get_time");
-    -1
+    trace!("kernel: sys_get_time"); 
+    if let Some(phys_addr) = virt_addr_to_phys_addr(VirtAddr(_ts as usize)) {
+        let us = get_time_us();
+        let ts = phys_addr.0 as *mut TimeVal;
+        unsafe {
+            *ts = TimeVal {
+                sec: us / 1_000_000,
+                usec: us % 1_000_000,
+            };
+        }
+        0
+    } else {
+        -1
+    }
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -57,13 +75,21 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 // YOUR JOB: Implement mmap.
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if mm_mmap(_start, _len, _port) == 0 {
+        0
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    if mm_munmap(_start, _len) == 0 {
+        0
+    } else {
+        -1
+    }
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {

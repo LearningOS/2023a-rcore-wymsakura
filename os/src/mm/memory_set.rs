@@ -262,6 +262,70 @@ impl MemorySet {
             false
         }
     }
+
+    /// map a MemorySet
+    pub fn mmap(&mut self, start: usize, len: usize, port: usize) -> isize {
+        // check start
+        if start & (PAGE_SIZE - 1) != 0 {
+            println!("invalid start: {:#x}", start);
+            return -1;
+        }
+        // check port
+        if port > 7usize || port == 0 {
+            println!("invalid port: {:#b}", port);
+            return -1;
+        }
+        // check valid
+        let start_vpn = VirtAddr::from(start).floor();
+        let end_vpn = VirtAddr::from(start + len).ceil();
+        let vpnrange = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpnrange {
+            if let Some(pte) = self.translate(vpn) {
+                if pte.is_valid() {
+                    println!("{:?} vpn occupied!", vpn);
+                    return -1;
+                }
+            }
+        }
+	    // set permission
+        let mut permission = MapPermission::U;
+        if (port & 1) != 0 {
+            permission |= MapPermission::R;
+        }
+        if (port & 2) != 0 {
+            permission |= MapPermission::W;
+        }
+        if (port & 4) != 0 {
+            permission |= MapPermission::X;
+        }
+        self.insert_framed_area(VirtAddr::from(start), VirtAddr::from(start+len), permission);
+        0
+    }
+
+    /// unmap a MemorySet
+    pub fn munmap(&mut self, start: usize, len: usize) -> isize {
+        // check start
+        if start & (PAGE_SIZE - 1) != 0 {
+            println!("invalid start: {:#x}", start);
+            return -1;
+        }
+        // check valid
+        let start_vpn = VirtAddr(start).floor();
+        let end_vpn = VirtAddr(start + len).ceil();
+        let vpnrange = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpnrange {
+            let pte = self.page_table.find_pte(vpn);
+            if !pte.unwrap().is_valid() {
+                return -1;
+            }
+            for area in &mut self.areas {
+                if area.vpn_range.get_start() <= vpn && vpn < area.vpn_range.get_end() {
+                    area.unmap_one(&mut self.page_table, vpn);
+                }
+            }
+        }
+        0
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -272,6 +336,7 @@ pub struct MapArea {
 }
 
 impl MapArea {
+    /// craete a MapArea
     pub fn new(
         start_va: VirtAddr,
         end_va: VirtAddr,
@@ -287,6 +352,7 @@ impl MapArea {
             map_perm,
         }
     }
+    /// map a frame
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
@@ -303,24 +369,28 @@ impl MapArea {
         page_table.map(vpn, ppn, pte_flags);
     }
     #[allow(unused)]
+    /// unmap a frame
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         if self.map_type == MapType::Framed {
             self.data_frames.remove(&vpn);
         }
         page_table.unmap(vpn);
     }
+    /// map a MapArea
     pub fn map(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.map_one(page_table, vpn);
         }
     }
     #[allow(unused)]
+    /// unmap a MapArae
     pub fn unmap(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.unmap_one(page_table, vpn);
         }
     }
     #[allow(unused)]
+    /// shrink a MapArea
     pub fn shrink_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
         for vpn in VPNRange::new(new_end, self.vpn_range.get_end()) {
             self.unmap_one(page_table, vpn)
@@ -328,6 +398,7 @@ impl MapArea {
         self.vpn_range = VPNRange::new(self.vpn_range.get_start(), new_end);
     }
     #[allow(unused)]
+    /// append a MapArea
     pub fn append_to(&mut self, page_table: &mut PageTable, new_end: VirtPageNum) {
         for vpn in VPNRange::new(self.vpn_range.get_end(), new_end) {
             self.map_one(page_table, vpn)
@@ -361,7 +432,9 @@ impl MapArea {
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
 pub enum MapType {
+    /// 恒等映射
     Identical,
+    /// 映射 on use
     Framed,
 }
 
@@ -409,4 +482,15 @@ pub fn remap_test() {
         .unwrap()
         .executable(),);
     println!("remap_test passed!");
+}
+
+/// mmap memory_set
+pub fn mm_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    kernel_space.mmap(_start, _len, _port)
+}
+/// munmap memory_set
+pub fn mm_munmap(_start: usize, _len: usize) -> isize {
+    let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    kernel_space.munmap(_start, _len)
 }
