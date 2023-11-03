@@ -141,7 +141,7 @@ impl TaskControlBlock {
         task_control_block
     }
 
-    /// 
+    /// create a new tcb
     pub fn spawn(self: &Arc<Self>, elf_data: &[u8]) -> Arc<Self> {
         // ---- access parent PCB exclusively
         let mut parent_inner = self.inner_exclusive_access();
@@ -188,7 +188,8 @@ impl TaskControlBlock {
             KERNEL_SPACE.exclusive_access().token(),
             kernel_stack_top,
             trap_handler as usize,
-        ); // return
+        ); 
+        // return
         task_control_block
         // **** release child PCB
         // ---- release parent PCB
