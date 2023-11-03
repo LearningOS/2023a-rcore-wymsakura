@@ -7,6 +7,8 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::PAGE_SIZE;
+use crate::mm::{VirtAddr, MapPermission, VPNRange};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -108,4 +110,71 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// map a MapArea
+pub fn task_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    // check start
+    if _start & (PAGE_SIZE - 1) != 0 {
+        println!("invalid start: {:#x}", _start);
+        return -1;
+    }
+    // check port
+    if _port > 7usize || _port == 0 {
+        println!("invalid port: {:#b}", _port);
+        return -1;
+    }
+
+    let start = VirtAddr::from(_start);
+    let end = VirtAddr::from(_start + _len);
+    let current = current_task().unwrap();
+    // check valid
+    let vpnrange = VPNRange::new(start.floor(), end.ceil());
+	for vpn in vpnrange {
+        if let Some(pte) = current.inner_exclusive_access().memory_set.translate(vpn) {
+            if pte.is_valid() {
+                return -1;
+            }
+        }
+    }
+    // set port 框架讲解视频
+    let mut port = MapPermission::U;
+    if (_port & 1) != 0 {
+            port |= MapPermission::R;
+        }
+        if (_port & 2) != 0 {
+            port |= MapPermission::W;
+        }
+        if (_port & 4) != 0 {
+            port |= MapPermission::X;
+        }
+    println!("start {:#x} end {:#x} permission {:?}", _start, _start + _len, _port);
+    current.inner_exclusive_access().memory_set.insert_framed_area(start, end, port);
+    0
+}
+
+///unmap a MapArea
+pub fn task_munmap(_start: usize, _len: usize) -> isize {
+    // check start
+    if _start & (PAGE_SIZE - 1) != 0 {
+        println!("invalid start: {:#x}", _start);
+        return -1;
+    }
+
+    let start = VirtAddr::from(_start);
+    let end = VirtAddr::from(_start + _len);
+    let current = current_task().unwrap();
+    // check valid
+    let vpnrange = VPNRange::new(start.floor(), end.ceil());
+    for vpn in vpnrange {
+        if let Some(pte) = current.inner_exclusive_access().memory_set.translate(vpn) {
+            if !pte.is_valid() {
+                return -1;
+            }
+        }
+    }
+    println!("start {:#x} end {:#x}", _start, _start + _len);
+    // the end should be start + len
+    current.inner_exclusive_access().memory_set.remove_area_with_start_vpn(start.floor());
+    0
 }

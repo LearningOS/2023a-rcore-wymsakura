@@ -1,4 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+use crate::task::current_user_token;
+
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -212,4 +214,18 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// translate VirtAddress to PhyAddress
+pub fn virt_addr_to_phys_addr(virt_addr : VirtAddr) -> Option<PhysAddr> {
+    let offset = virt_addr.page_offset();
+    let vpn = virt_addr.floor();
+    if let Some(ppn) = PageTable::from_token(current_user_token())
+        .translate(vpn)
+        .map(|pte| pte.ppn()) {
+            Some(PhysAddr::from(PhysAddr::from(ppn).0 + offset))
+    } else {
+        println!("virt_addr_to_phys_addr() fail");
+        None
+    }
 }
